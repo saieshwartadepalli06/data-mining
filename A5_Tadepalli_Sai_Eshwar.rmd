@@ -1,0 +1,353 @@
+---
+title: "A5_Tadepalli_Sai_Eshwar"
+author: "Sai Eshwar Tadepalli"
+date: "2023-06-23"
+output: 
+  html_document:
+    highlight: breezedark
+    toc: yes
+    fig_width: 15
+    fig_height: 10
+editor_options: 
+  chunk_output_type: console
+---
+
+## 1 - Package load, data import, inspection, and partitioning
+
+1.A Load all the required packages
+
+```{r loading packages}
+library(caret)
+library(kernlab)
+library(rminer)
+library(RWeka)
+library(matrixStats)
+library(knitr)
+
+# upload tictoc to time the elapsed time of knitting this program. Install it if necessary
+library(tictoc) 
+
+# start the timer
+tic() 
+```
+
+1.B Import the NA_sales_filtered.csv and partition the dataset to the training set and testing set
+
+i. Import NA_sales_filtered.csv and set stringsAsFactors = False.
+ii. Create a data frame with all of the variables except for Name.
+iii. Transform character variables except for Name to factors.
+iv. Create the training and testing sets based on percentage split – 70% for training and 30% for testing.
+
+```{r setup and import the data}
+cloud_wd <- getwd()
+setwd(cloud_wd)
+
+# Read csv files and set stringsAsFactors to False
+NA_sales_filtered <- read.csv(file = "NA_sales_filtered.csv", stringsAsFactors = FALSE)
+
+# Create data frame with all of the variables except Name
+NA_sales_filtered <- NA_sales_filtered[,-1]
+str(NA_sales_filtered)
+
+# Transform character variables except for Name to factors
+NA_sales_filtered$Platform = factor(NA_sales_filtered$Platform)
+NA_sales_filtered$Genre = factor(NA_sales_filtered$Genre)
+NA_sales_filtered$Rating = factor(NA_sales_filtered$Rating)
+
+set.seed(500)
+inTrain <- createDataPartition(NA_sales_filtered$NA_Sales, p=0.7, list=FALSE)
+```
+
+```{r}
+salesTraintarget <- NA_sales_filtered[inTrain,8]
+salesTesttarget <- NA_sales_filtered[-inTrain,8]
+salesTraininput <- NA_sales_filtered[inTrain,-8]
+salesTestinput <- NA_sales_filtered[-inTrain,-8]
+```
+
+## 2 - Build and evaluate neural network models for numeric prediction tasks
+
+2.A Build and evaluate MLP models for numeric prediction with the video game sales data (imported and prepared in 1B).
+
+i. Build an MLP model on MultilayerPerceptron()’s default setting on the training set. Evaluate the model performance on the training set and testing set.
+
+```{r build neural network models}
+# Designate a shortened name MLP for the MultilayerPercentron ANN method in RWeka
+MLP <- make_Weka_classifier("weka/classifiers/functions/MultilayerPerceptron")
+l <- 0.3
+m <- 0.2
+n <- 500
+h <- 'a'
+metrics_list <- c("MAE","RMSE","MAPE","RMSPE","RAE","RRSE","R2")
+```
+
+```{r mlp model}
+model_a <- MLP(salesTraintarget ~ .,data = salesTraininput, control = Weka_control(L=l,M=m, N=n,H=h))
+
+pred_Na_mlp_test1 <- predict(model_a, salesTestinput)
+mmetric(salesTesttarget, pred_Na_mlp_test1, metrics_list)
+
+pred_Na_mlp_train1 <- predict(model_a, salesTraininput)
+mmetric(salesTraintarget, pred_Na_mlp_train1, metrics_list)
+```
+> The default settings of MLP model on test and train dataset extracts a value of R2 (0.23 vs 0.28), RMSE (0.46 vs 0.40) and RRSE (88.65 vs 85.50) when h is 'a'. 
+
+```{r mlp default different h}
+# Try different H values
+model_0 <- MLP(salesTraintarget ~ .,data = salesTraininput, control = Weka_control(L=l,M=m, N=n,H=0))
+
+pred_Na_mlp_test2 <- predict(model_0, salesTestinput)
+mmetric(salesTesttarget, pred_Na_mlp_test2, metrics_list)
+
+pred_Na_mlp_train2 <- predict(model_0, salesTraininput)
+mmetric(salesTraintarget, pred_Na_mlp_train2, metrics_list)
+```
+> The MLP model when H is '0' extracts value of test and train datasets as follows for R2 (0.09 vs 0.06), RMSE (0.99 vs 0.97) and RRSE (187.51 vs 202.90).
+
+```{r}
+model_o <- MLP(salesTraintarget ~ .,data = salesTraininput, control = Weka_control(L=l,M=m, N=n,H='o'))
+
+pred_Na_mlp_test3 <- predict(model_o, salesTestinput)
+mmetric(salesTesttarget, pred_Na_mlp_test3, metrics_list)
+
+pred_Na_mlp_train3 <- predict(model_o, salesTraininput)
+mmetric(salesTraintarget, pred_Na_mlp_train3, metrics_list)
+```
+> The MLP model when H is 'o' extracts value of test and train datasets as follows for R2 (0.37 vs 0.32), RMSE (0.45 vs 0.41) and RRSE (85.36 vs 86.26).
+
+ii. Build a two-hidden-layer MLP model and change one of the other hyper-parameter values – e.g. the learning rate on the training set. Evaluate the model performance on the training set and testing set.
+
+```{r hidden layer}
+model_11_11 <- MLP(salesTraintarget ~ .,data = salesTraininput, control = Weka_control(L=0.1, M=m, N=n, H='11,11'))
+
+pred_Na_mlp_h_test1 <- predict(model_11_11, salesTestinput)
+mmetric(salesTesttarget, pred_Na_mlp_h_test1, metrics_list)
+
+pred_Na_mlp_h_train1 <- predict(model_11_11, salesTraininput)
+mmetric(salesTraintarget, pred_Na_mlp_h_train1, metrics_list)
+```
+
+> When building hidden layer on MLP model for '11,11' and l as 0.1 on testing and training set we get values of R2 (0.27 vs 0.41), RMSE (0.45 vs 0.36) and RRSE (86.59 vs 76.83).
+
+```{r}
+model_a_a <- MLP(salesTraintarget ~ .,data = salesTraininput, control = Weka_control(L=0.1, M=m, N=n, H='a,a'))
+
+pred_Na_mlp_h_test2 <- predict(model_a_a, salesTestinput)
+mmetric(salesTesttarget, pred_Na_mlp_h_test2, metrics_list)
+
+pred_Na_mlp_h_train2 <- predict(model_a_a, salesTraininput)
+mmetric(salesTraintarget, pred_Na_mlp_h_train2, metrics_list)
+```
+
+> When building hidden layer on MLP model for 'a,a' and l as 0.1 on testing and traing set we get values of R2 (0.33 vs 0.44), RMSE (0.43 vs 0.35) and RRSE (81.90 vs 74.69).
+
+## 3 - Build and evaluate SVM (ksvm) models for numeric prediction tasks
+
+3.A. Build and evaluate ksvm models for numeric prediction with the video game sales data (imported and prepared in 1B).
+
+i. Build a model on ksvm()’s default setting on the training set. Evaluate the model performance on the training set and testing set.
+
+```{r def kvsm model}
+model_kvsm_def <- ksvm(salesTraintarget ~ .,data = salesTraininput)
+
+pred_Na_kvsm_test1 <- predict(model_kvsm_def, salesTestinput)
+mmetric(salesTesttarget, pred_Na_kvsm_test1, metrics_list)
+
+pred_Na_kvsm_train1 <- predict(model_kvsm_def, salesTraininput)
+mmetric(salesTraintarget, pred_Na_kvsm_train1, metrics_list)
+```
+> The KVSM default setting for testing and training set gives the value of R2 (0.44 vs 0.47), RMSE (0.42 vs 0.37) and RRSE (80.57 vs 78.38).
+
+ii. Build a ksvm model using a different kernel function on the training set. Use the default C value. Evaluate the model performance on the training set and testing set.
+
+```{r kvsm model}
+model_kvsm_kernel1 <- ksvm(salesTraintarget ~ ., data = salesTraininput, kernel="rbfdot", C=1)
+
+pred_Na_kvsm_test2 <- predict(model_kvsm_kernel1, salesTestinput)
+mmetric(salesTesttarget, pred_Na_kvsm_test2, metrics_list)
+
+pred_Na_kvsm_train2 <- predict(model_kvsm_kernel1, salesTraininput)
+mmetric(salesTraintarget, pred_Na_kvsm_train2, metrics_list)
+
+model_kvsm_kernel2 <- ksvm(salesTraintarget ~ ., data = salesTraininput, kernel="polydot", C=1)
+
+pred_Na_kvsm_test3 <- predict(model_kvsm_kernel2, salesTestinput)
+mmetric(salesTesttarget, pred_Na_kvsm_test3, metrics_list)
+
+pred_Na_kvsm_train3 <- predict(model_kvsm_kernel2, salesTraininput)
+mmetric(salesTraintarget, pred_Na_kvsm_train3, metrics_list)
+
+model_kvsm_kernel3 <- ksvm(salesTraintarget ~ ., data = salesTraininput, kernel="laplacedot", C=1)
+
+pred_Na_kvsm_test4 <- predict(model_kvsm_kernel3, salesTestinput)
+mmetric(salesTesttarget, pred_Na_kvsm_test4, metrics_list)
+
+pred_Na_kvsm_train4 <- predict(model_kvsm_kernel3, salesTraininput)
+mmetric(salesTraintarget, pred_Na_kvsm_train4, metrics_list)
+```
+> The kvsm model for "rbfdot" on testing and training set gives the value of R2 (0.44 vs 0.47), RMSE (0.42 vs 0.37) and RRSE (80.58 vs 78.46). Whereas, for "polydot" the value of R2 (0.30 vs 0.23), RMSE (0.47 vs 0.44) and RRSE (90.57 vs 92.30). Finally, for "laplacedot" the value of R2 (0.43 vs 0.51), RMSE (0.43 vs 0.37) and RRSE (82.62 vs 78.45).
+
+iii. Build a ksvm model using a different cost value (i.e. C= c, where c>1) on the training set. Evaluate the model performance on the training set and testing set.
+
+```{r kvsm with different C and c>1}
+model_kvsm_kernel4 <- ksvm(salesTraintarget ~ ., data = salesTraininput,kernel = "rbfdot", C=5)
+
+pred_Na_kvsm_test4 <- predict(model_kvsm_kernel4, salesTestinput)
+mmetric(salesTesttarget, pred_Na_kvsm_test4, metrics_list)
+
+pred_Na_kvsm_train4 <- predict(model_kvsm_kernel4, salesTraininput)
+mmetric(salesTraintarget, pred_Na_kvsm_train4, metrics_list)
+
+model_kvsm_kernel5 <- ksvm(salesTraintarget ~ ., data = salesTraininput,kernel = "polydot", C=5)
+
+pred_Na_kvsm_test5 <- predict(model_kvsm_kernel5, salesTestinput)
+mmetric(salesTesttarget, pred_Na_kvsm_test5, metrics_list)
+
+pred_Na_kvsm_train5 <- predict(model_kvsm_kernel5, salesTraininput)
+mmetric(salesTraintarget, pred_Na_kvsm_train5, metrics_list)
+
+model_kvsm_kernel6 <- ksvm(salesTraintarget ~ ., data = salesTraininput, kernel="laplacedot", C=5)
+
+pred_Na_kvsm_test6 <- predict(model_kvsm_kernel6, salesTestinput)
+mmetric(salesTesttarget, pred_Na_kvsm_test6, metrics_list)
+
+pred_Na_kvsm_train6 <- predict(model_kvsm_kernel6, salesTraininput)
+mmetric(salesTraintarget, pred_Na_kvsm_train6, metrics_list)
+```
+
+> The kvsm model for "rbfdot" with C as 5 on testing and training set gives the value of R2 (0.44 vs 0.47), RMSE (0.42 vs 0.37) and RRSE (80.57 vs 78.37). Whereas, for "polydot" the value of R2 (0.30 vs 0.23), RMSE (0.47 vs 0.44) and RRSE (90.57 vs 92.30). Finally, for "laplacedot" the value of R2 (0.43 vs 0.51), RMSE (0.43 vs 0.37) and RRSE (82.62 vs 78.47).
+
+## 4 - Build and evaluate knn (IBk) models for numeric prediction tasks
+
+4.A. Build and evaluate IBk models for numeric prediction with the video game sales data (imported and prepared in 1B).
+
+i. Build a model on IBk()’s default setting on the training set. Evaluate the model performance on the training set and testing set.
+
+```{r def ibk model}
+knn_model_1 <- IBk(salesTraintarget ~ ., data = salesTraininput,control = Weka_control(K=1))
+
+pred_Na_knn_test1 <- predict(knn_model_1, salesTestinput)
+mmetric(salesTesttarget, pred_Na_knn_test1, metrics_list)
+
+pred_Na_knn_train1 <- predict(knn_model_1, salesTraininput)
+mmetric(salesTraintarget, pred_Na_knn_train1, metrics_list)
+```
+> The default setting model of ibk on testing and training sets give the value of R2 (0.15 vs 0.99), RMSE (0.56 vs 0.01) and RRSE (106.69 vs 2.24).
+
+ii. Build an IBk model using a different K value on the training set. Hold other parameters at the default setting. Evaluate the model performance on the training set and testing set.
+
+```{r knn model}
+knn_model_2 <- IBk(salesTraintarget ~ ., data = salesTraininput,control = Weka_control(K=5))
+
+pred_Na_knn_test2 <- predict(knn_model_2, salesTestinput)
+mmetric(salesTesttarget, pred_Na_knn_test2, metrics_list)
+
+pred_Na_knn_train2 <- predict(knn_model_2, salesTraininput)
+mmetric(salesTraintarget, pred_Na_knn_train2, metrics_list)
+```
+
+> The default setting model of ibk with k = 5 on testing and training sets give the value of R2 (0.24 vs 0.46), RMSE (0.46 vs 0.35) and RRSE (87.37 vs 73.70).
+
+iii. Build an IBk model using a weighted voting approach (e.g. I=TRUE) on the training set. Evaluate the model performance on the training set and testing set.
+
+```{r knn model 3}
+knn_model_3 <- IBk(salesTraintarget ~ ., data = salesTraininput,control = Weka_control(K=5, I=TRUE))
+
+pred_Na_knn_test3 <- predict(knn_model_3, salesTestinput)
+mmetric(salesTesttarget, pred_Na_knn_test3, metrics_list)
+
+pred_Na_knn_train3 <- predict(knn_model_3, salesTraininput)
+mmetric(salesTraintarget, pred_Na_knn_train3, metrics_list)
+```
+> The default setting model of ibk with k = 5 and I = True on testing and training sets give the value of R2 (0.25 vs 0.99), RMSE (0.45 vs 0.043) and RRSE (86.72 vs 9.10).
+
+iv. Build an IBk model by automatically selecting K (i.e., X=TRUE) on the training set. Evaluate the model performance on the training set and testing set.
+
+```{r knn model 4 with I}
+knn_model_4 <- IBk(salesTraintarget ~ ., data = salesTraininput,control = Weka_control(K=5, I=TRUE,X=TRUE))
+
+pred_Na_knn_test4 <- predict(knn_model_4, salesTestinput)
+mmetric(salesTesttarget, pred_Na_knn_test4, metrics_list)
+
+pred_Na_knn_train4 <- predict(knn_model_4, salesTraininput)
+mmetric(salesTraintarget, pred_Na_knn_train4, metrics_list)
+```
+> The default setting model of ibk with k = 5, I=True, andX = True on testing and training sets give the value of R2 (0.25 vs 0.99), RMSE (0.45 vs 0.04) and RRSE (86.72 vs 9.10).
+
+```{r knn model 4 without I}
+knn_model_4 <- IBk(salesTraintarget ~ ., data = salesTraininput,control = Weka_control(K=5,X=TRUE))
+
+pred_Na_knn_test4 <- predict(knn_model_4, salesTestinput)
+mmetric(salesTesttarget, pred_Na_knn_test4, metrics_list)
+
+pred_Na_knn_train4 <- predict(knn_model_4, salesTraininput)
+mmetric(salesTraintarget, pred_Na_knn_train4, metrics_list)
+```
+
+## 5 - Cross-validation function for numeric prediction models
+
+5.A. Define a named function (e.g., cv_function) for cross-validation evaluation of classification or numeric prediction models with df, target, nFolds, seedVal, method and metrics_list for input.
+
+5.B. Generate a table of fold-by-fold performance metrics, and means and standard deviations of performance over all of the folds.
+
+```{r defining variables}
+df <- NA_sales_filtered
+target <- 8
+seedVal <- 500
+```
+
+CV function
+
+```{r Define a user-defined, named function for CV}
+
+cv_function <- function(df, target, nFolds, seedVal, pred_method, metrics_list)
+{
+# create folds using the assigned values
+
+set.seed(seedVal)
+folds = createFolds(df[,target],nFolds)
+
+# The lapply loop
+
+cv_results <- lapply(folds, function(x)
+{ 
+# data preparation:
+  test_target <- df[x,target]
+  test_input <- df[x,-target]
+  
+  train_target <- df[-x,target]
+  train_input <- df[-x,-target]
+  
+  pred_model <- pred_method(train_target ~ .,data = train_input)  
+  pred <- predict(pred_model, test_input)
+  return(mmetric(test_target,pred,metrics_list))
+})
+
+cv_results_m <- as.matrix(as.data.frame(cv_results))
+cv_mean<- as.matrix(rowMeans(cv_results_m))
+cv_sd <- as.matrix(rowSds(cv_results_m))
+colnames(cv_mean) <- "Mean"
+colnames(cv_sd) <- "Sd"
+cv_all <- cbind(cv_results_m, cv_mean, cv_sd)
+kable(t(cbind(cv_mean,cv_sd)),digits=2)
+}
+```
+
+## 6 - 3 fold cross-validation of MLP, ksvm and IBk models
+
+6.A. Use the default settings of MultilayerPerceptron(), ksvm and IBk to perform cross-validation for numeric prediction with the video game sales data (imported and prepared in 1B).
+
+```{r cv}
+cv_function(df, target, 3, seedVal, MLP, metrics_list)
+cv_function(df, target, 3, seedVal, ksvm, metrics_list)
+cv_function(df, target, 3, seedVal, IBk, metrics_list)
+```
+> The cv function for mlp with mean and sd has r2 value of (0.23 vs 0.04), kvsm has r2 of (0.40 vs 0.02), ibk has r2 of (0.13 vs 0.01).
+
+## Reflections 
+
+> Firstly, MLP model default settings yield moderate performance on the test set with an R2 value of 0.23. Whereas, the RMSE and RRSE values (0.46 vs 88.65) suggests there is a chance of improvement. When adjusting h values, the results are mixed. Some variations yield slight improvements in R2 and RMSE, indicating a better fit, while others show equal or lower performance. When applying Cross Validation CV function, the MLP model demonstrates significant variation with low mean R2 value of 0.23 indicating an inability to capture consistently the underling patterns. 
+
+> Secondly, KVSM model performs somewhat well with its default settings, achieving an R2 of 0.44 on the test set. The choice of kernel function, has a significant impact on the performance. The 'rbfdot' and 'laplacedot' kernel produce equivalent R2 (0.44 vs 0.43) and RMSE values (0.42 vs 0.43), indicating a better fit than 'polydot' kernel, which didn't performed well with R2 value of 0.30 on the test set. KVSM's cross-validation results indicate consistent performance across modifications, with low standard deviations and high mean R2 score of 0.40, indicating a good model.
+
+> Finally, the IBK model initially performs poorly with its default settings, exhibiting a very low R2 of 0.15 and high RMSE of 0.56 and RRSE values of 0.545. However, by adjusting the hyperparameters such as the number of neighbors (k) and inclusion of instance weights (I) or attribute weights (X), improvements can be seen in R2 and RMSE. The cross-validation results for IBK show low mean R2 scores of 0.13, suggesting difficulty in capturing the underlying patterns consistently, and there is also a notable variation, as indicated by the standard deviations. However, the IBK model though initially performs poorly is improved with adjusted hyperparameters. Despite the improvements, it still faces challenges in achieving high R2 scores and lower RRSE values.
