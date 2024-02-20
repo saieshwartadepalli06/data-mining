@@ -1,0 +1,228 @@
+---
+title: "A2_Tadepalli_Sai_Eshwar"
+author: "Sai Eshwar Tadepalli"
+date: "2023-05-31"
+output:
+  html_document:
+    theme: readable
+    highlight: breezedark
+    toc: yes
+    fig_width: 10
+    fig_height: 5
+editor_options: 
+  chunk_output_type: console
+---
+
+# 1. Set up, data import and inspection code
+
+1.  Examine the overall 'structure' of the input data. Transform all of the character variables that include categorical values to factor variables. After this transformation, show the overall structure and summary of the input data.
+
+```{r setup data, import and inspection of code}
+library(C50)
+library(caret)
+library(rminer)
+library(tictoc) 
+tic()
+
+cloud_wd <- getwd()
+setwd(cloud_wd)
+
+balanced <- read.csv(file = "CD_additional_balanced.csv", stringsAsFactors = FALSE)
+str(balanced)
+
+# Transforming character variables to factor variables
+balanced$job = factor(balanced$job)
+balanced$marital = factor(balanced$marital)
+balanced$education = factor(balanced$education)
+balanced$default = factor(balanced$default)
+balanced$housing = factor(balanced$housing)
+balanced$loan = factor(balanced$loan)
+balanced$contact = factor(balanced$contact)
+balanced$month = factor(balanced$month)
+balanced$day_of_week =  factor(balanced$day_of_week)
+balanced$poutcome = factor(balanced$poutcome)
+balanced$y = factor(balanced$y)
+
+str(balanced)
+summary(balanced)
+```
+
+# 2. Target variable
+
+2.  For each level of the target variable, show the count and the percentage of instances belonging to that level.
+
+```{r count and percentage of instances at each level}
+
+#Count of target variable for each level
+y.table <- table(balanced$y)
+y.table
+
+# Percentage of target variable for each level
+y.perc <- prop.table(table(balanced$y))*100
+y.perc
+```
+
+# 3. Data preparation
+
+3.A Partition the data set for simple hold-out classification model building and evaluation -- 70% for training and the other 30% for testing. (not required: Show the summary of train and test sets.)
+
+```{r simple-hold out classification model}
+set.seed(100)
+inTrain <- createDataPartition(balanced$y, p=0.7, list=FALSE)
+
+# inTrain is a list of indices to the rows in the CD Additional Balanced data frame
+str(inTrain)
+
+# Assign the rows in CD Additional Balanced indexed by inTrain to create a train set
+# Assign all other rows indexed by -inTrain to create a test set
+
+balancedTrain <- balanced[inTrain,]
+balancedTest <- balanced[-inTrain,]
+
+# Examine the distributions of the target variable and other attriutes of train and test sets
+# Make sure that they are consistent between train and test sets.
+
+summary(balancedTrain)
+summary(balancedTest)
+```
+
+3.B Show the distributions (i.e., percentages or proportions of "yes" and "n") of y in the train set and in the test set.
+
+```{r Distribution of y in the train and test set}
+table(balancedTrain$y)
+table(balancedTest$y)
+
+prop.table(table(balancedTrain$y))
+prop.table(table(balancedTest$y))
+```
+
+# 4. Train and Test Decision Tree 1 to classify y
+
+4.A Train a C5.0 model using the default setting to classify y with all other variables as predictors. Show this model and the summary of the model. Do not plot the tree at this point.
+
+```{r c5.0 model 1}
+balanced_m1_c50 <- C5.0(y~., balancedTrain)
+balanced_m1_c50
+summary(balanced_m1_c50)
+```
+
+4.B Using the predict() and mmetric() functions, generate and compare this model's confusion matrices and classification evaluation metrics in the test and train sets.
+
+```{r model 1 confusion matrices and classification evaluation metrics}
+# Apply the model to the hold-out test set and generate holdout evaluation metrics
+predicted_y_test1 <- predict(balanced_m1_c50, balancedTest)
+
+# mmetric() generates confusion matrix (3rd argument) based on the true target variable values (1st argument)
+# and the predicted target variable values (2nd argument) 
+mmetric(balancedTest$y, predicted_y_test1, metric="CONF")
+mmetric(balancedTest$y, predicted_y_test1, metric=c("ACC","TPR","PRECISION","F1"))
+
+predicted_y_train1 <- predict(balanced_m1_c50, balancedTrain)
+mmetric(balancedTrain$y, predicted_y_train1, metric="CONF")
+mmetric(balancedTrain$y, predicted_y_train1, metric=c("ACC","TPR","PRECISION","F1"))
+```
+
+4.B.A Are there significant differences between train and test? Discuss in text.
+
+> The value of metrics when compared between train and test dataset are as follows for accuracy (91.37 vs 87.53), true positive rate (88.39 vs 84.12 and 94.36 vs 90.94), precision (94 vs 90.28 and 89 vs 85.13) and f-measure (91.11 vs 87.09 and 91.62 vs 87.94). Whereas, the value of metrics for confusion metrics also decreasing for train and test datasets as follows true positive (2871 vs 1171), false positive (377 vs 221), false negative (183 vs 126) and true negative (3065 vs 1266). Since the difference in between metrics is not that high, we can say that there is no significant differences between train and test datasets. 
+
+# 5. Train and Test Decision Tree 2 to classify y
+
+5.A Build a simplified version of Decision Tree 1 by adjusting the confidence factor (CF) of Decision Tree 1. Show this model and the summary of the model. Plot the tree since it is simpler.Try to adjust the CF value from non-zero to 1 to come up with a tree that is simple enough to be plotted.
+
+```{r Change confidence factor to 1}
+# Change the CF(confidenceFactor) value to 1
+balanced_m2_c50 <- C5.0(y~., balancedTrain, control = C5.0Control(CF = 1))
+balanced_m2_c50
+plot(balanced_m2_c50)
+summary(balanced_m2_c50)
+```
+
+5.B Using the predict() and mmetric() functions, generate and compare this model's confusion matrices and classification evaluation metrics in the test and train sets.
+
+```{r model 2 confusion matrices and classification evaluation metrics}
+# Apply the model to the hold-out test set and generate holdout evaluation metrics
+predicted_y_test2 <- predict(balanced_m2_c50, balancedTest)
+
+# mmetric() generates confusion matrix (3rd argument) based on the true target variable values (1st argument)
+# and the predicted target variable values (2nd argument) 
+mmetric(balancedTest$y, predicted_y_test2, metric="CONF")
+mmetric(balancedTest$y, predicted_y_test2, metric=c("ACC","TPR","PRECISION","F1"))
+
+# For comparison, apply the model to the train set and generate evaluation metrics. 
+# Check out the performance drop in the holdout set.
+predicted_y_train2 <- predict(balanced_m2_c50, balancedTrain)
+mmetric(balancedTrain$y, predicted_y_train2, metric="CONF")
+mmetric(balancedTrain$y, predicted_y_train2, metric=c("ACC","TPR","PRECISION","F1"))
+```
+
+5.B.A Are there significant differences between train and test? Discuss in text. How does performance compare to Chunk 4?
+
+> The value of metrics when compared between train and test dataset are as follows for accuracy (94.13 vs 86.35), true positive rate (92.51 vs 84.77 and 95.75 vs 87.93), precision (95.60 vs 87.53 and 92.75 vs 85.23) and f-measure (94.03 vs 86.13 and 94.22 vs 86.56). It can be inferred from this observation that there is no significant difference between test and train data as the difference is very low. Whereas, the value of metrics for confusion metrics for train and test datasets as follows true positive (3005 vs 1180), false positive (243 vs 212), false negative (138 vs 168) and true negative (3110 vs 1224). The overall performance of chunk 5 is increased for train set after changing the CF to 1 when compared to chunk 4. 
+
+# 6. Train and Test Decision Tree 3 to predict y
+
+6.A Remove the variable -- duration from the predictors for Decision Tree 3. Using the default setting of C5.0 to build a model to classify y with the remaining predictors of Decision Tree 1. Show this model and the summary of the model. Do not plot the tree at this point.
+
+```{r c5.0 model 3}
+balanced_m3_c50 <- C5.0(balancedTrain[c(-21,-11)],balancedTrain$y)
+balanced_m3_c50
+summary(balanced_m3_c50)
+```
+
+6.B Using the predict() and mmetric() functions, generate and compare this model's confusion matrices and classification evaluation metrics in the test and train sets.
+
+```{r model 3 confusion matrices and classification evaluation metrics}
+# Apply the model to the hold-out test set and generate holdout evaluation metrics
+predicted_y_test3 <- predict(balanced_m3_c50, balancedTest)
+
+# mmetric() generates confusion matrix (3rd argument) based on the true target variable values (1st argument)
+# and the predicted target variable values (2nd argument) 
+mmetric(balancedTest$y, predicted_y_test3, metric="CONF")
+mmetric(balancedTest$y, predicted_y_test3, metric=c("ACC","TPR","PRECISION","F1"))
+
+predicted_y_train3 <- predict(balanced_m3_c50, balancedTrain)
+mmetric(balancedTrain$y, predicted_y_train3, metric="CONF")
+mmetric(balancedTrain$y, predicted_y_train3, metric=c("ACC","TPR","PRECISION","F1"))
+```
+
+6.B.A Are there significant differences between train and test? Discuss in text. How does performance compare to Chunk 4,5?
+
+> The value of metrics when compared between train and test dataset after removing duration are as follows for accuracy (76.20 vs 73.92), true positive rate (86.85 vs 83.69 and 65.54 vs 64.15), precision (71.59 vs 70.01 and 83.29 vs 79.73) and f-measure (78.49 vs 76.24 and 73.36 vs 71.09). It can be inferred from this observation that the test data metrics are low. Whereas, the value of metrics for confusion metrics for train and test datasets as follows true positive (2821 vs 1165), false positive (427 vs 227), false negative (1119 vs 499) and true negative (2129 vs 893). The overall performance of test and train set in chunk 6 is decreased when compared to chunk 4,5. Therefore, it can be concluded that there is significant difference between chunk 6 and chunk 4,5. 
+
+# 7. Training and Testing Decision Tree 4 to classify y
+
+7.A Build a simplified version of Decision Tree 3 by adjusting the confidence factor (CF) of Decision Tree 3. Show this model and the summary of the model. Plot the tree.
+
+```{r Change model confidence factor to 1}
+# Change the CF(confidenceFactor) value to 1
+# Use the train set to build a model
+balanced_m4_c50 <- C5.0(balancedTrain[c(-21,-11)], balancedTrain$y, control = C5.0Control(CF = 1))
+balanced_m4_c50
+plot(balanced_m4_c50)
+summary(balanced_m4_c50)
+```
+
+7.B Using the predict() and mmetric() functions, generate and compare this model's confusion matrices and classification evaluation metrics in the test and train sets.
+
+```{r model 4 confusion matrices and classification evaluation metrics}
+# Apply the model to the hold-out test set and generate holdout evaluation metrics
+predicted_y_test4 <- predict(balanced_m4_c50, balancedTest)
+
+# mmetric() generates confusion matrix (3rd argument) based on the true target variable values (1st argument)
+# and the predicted target variable values (2nd argument) 
+mmetric(balancedTest$y, predicted_y_test4, metric="CONF")
+mmetric(balancedTest$y, predicted_y_test4, metric=c("ACC","TPR","PRECISION","F1"))
+
+# For comparison, apply the model to the train set and generate evaluation metrics. 
+# Check out the performance drop in the holdout set.
+predicted_y_train4 <- predict(balanced_m4_c50, balancedTrain)
+mmetric(balancedTrain$y, predicted_y_train4, metric="CONF")
+mmetric(balancedTrain$y, predicted_y_train4, metric=c("ACC","TPR","PRECISION","F1"))
+
+toc()
+```
+
+7.B.A Are there significant differences between train and test? Discuss in text. How does performance compare to Chunk 4,5,6?
+
+> The value of metrics when compared between train and test dataset after removing duration and changing CF to 1 are as follows for accuracy (84.42 vs 70.36), true positive rate (89.62 vs 76.50 and 79.21 vs 64.22), precision (81.17 vs 68.13 and 88.41 vs 73.21) and f-measure (85.19 vs 72.08 and 83.56 vs 68.42). It can be inferred from this observation that there is a little significant difference between the test and train data metrics. Whereas, the value of metrics for confusion metrics for train and test datasets as follows true positive (2911 vs 1065), false positive (337 vs 327), false negative (675 vs 498) and true negative (2573 vs 894). The overall performance of chunk 7 is decreased for train set when compared to chunk 4,5,6 at the same time increased for train set when compared to chunk 6.
