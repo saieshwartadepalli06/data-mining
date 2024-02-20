@@ -1,0 +1,292 @@
+---
+title: "A7_Tadepalli_Sai_Eshwar"
+author: "Sai Eshwar Tadepalli"
+date: "2023-07-23"
+output: 
+  html_document:
+    highlight: breezedark
+    toc: yes
+    fig_width: 15
+    fig_height: 10
+editor_options: 
+  chunk_output_type: console
+---
+
+## Task I - EDA 
+Perform exploratory data analysis on the dataset. Add text to note items from code blocks you have observed. 
+
+```{r setup and import data}
+library(rmarkdown)
+library(psych)
+library(scatterplot3d)
+library(caret)
+library(C50)
+library(rminer)
+library(e1071)
+library(matrixStats)
+library(knitr)
+library(rpart)
+library(kernlab)
+library(arules)
+library(tictoc) 
+tic()
+
+# Setting up working directory 
+cloud_wd <- getwd()
+setwd(cloud_wd)
+
+# Importing Data
+census_data <- read.csv(file = "census.csv", stringsAsFactors = FALSE)
+str(census_data)
+
+# Converting character into factors
+census_data$workclass = factor(census_data$workclass)
+census_data$education = factor(census_data$education)
+census_data$marital.status = factor(census_data$marital.status)
+census_data$occupation = factor(census_data$occupation)
+census_data$relationship = factor(census_data$relationship)
+census_data$race = factor(census_data$race)
+census_data$sex = factor(census_data$sex)
+census_data$native.country = factor(census_data$native.country)
+census_data$y = factor(census_data$y)
+
+#View(census_data)
+
+# There are ? in the dataframe so it can be done in two ways, one keeping ? as it is and other one is changing ? to some variable 
+
+census_data_cleaned <- census_data
+
+summary(census_data_cleaned)
+
+census_data_cleaned[sapply(census_data_cleaned,is.factor)] <- data.frame(lapply(census_data_cleaned[sapply(census_data_cleaned,is.factor)], function(x) {gsub("\\?","Other",x) }),stringsAsFactors = TRUE)
+
+#View(census_data_cleaned)
+
+str(census_data_cleaned)
+summary(census_data_cleaned)
+
+# Correlation Analysis
+pairs.panels(census_data[c(1,3,4,11:13)])
+```
+
+```{r}
+# Check for any NA's
+na_counts <- colSums(is.na(census_data_cleaned))
+na_counts
+```
+
+
+## Task II Data Preparation:
+Prepare your data for modeling.
+
+```{r data preparation for cleaned data}
+set.seed(500)
+inTrain <- createDataPartition(census_data$y, p=0.7, list=FALSE)
+inTrain_cleaned <- createDataPartition(census_data_cleaned$y, p=0.7, list=FALSE)
+
+censusTrain <- census_data[inTrain,]
+censusTest <- census_data[-inTrain,]
+censusTrain_cleaned <- census_data_cleaned[inTrain_cleaned,]
+censusTest_cleaned <- census_data_cleaned[-inTrain_cleaned,]
+```
+
+## Task III - Model Building 
+Build a variety of models and keep them to show your efforts to achieve good performance. Your stakeholders prefer interpretability over performance. Consider this as you choose your models. How many models are sufficient? Enough to show that you found underfitting, overfitting and a good balance between the two. Your stakeholders still want a good model however.
+
+Using Navie Bayes as first model for uncleaned data
+```{r Naive Bayes model for uncleaned data}
+# Using the train set to build a model
+census_nb <- naiveBayes(y~., censusTrain)
+census_nb
+
+# Applying the model to the hold-out test set and generate holdout evaluation metrics
+predicted_test1 <- predict(census_nb, censusTest)
+mmetric(censusTest$y, predicted_test1, metric=c("ACC","TPR","PRECISION","F1"))
+
+# For comparison, applying the model to the train set and generate evaluation metrics. 
+predicted_y_train1 <- predict(census_nb, censusTrain)
+mmetric(censusTrain$y, predicted_y_train1, metric=c("ACC","TPR","PRECISION","F1"))
+```
+
+> The test accuracy of 83.21% was greater than the train accuracy of 82.79%, indicating that the Naive Bayes model performed poorly on the uncleaned data. This difference implies that the model has difficulty extracting useful information from the uncleaned dataset, possibly as a result of the presence of missing values ("?"). These missing data might have impacted the model's training process and reduced train accuracy.
+
+Using C5.0 as second model for uncleaned data
+```{r C5.0 model for uncleaned data}
+# Using the train set to build a model
+census_c50 <- C5.0(y~., censusTrain)
+census_c50
+
+# Applying the model to the hold-out test set and generate holdout evaluation metrics
+
+predicted_y_test2 <- predict(census_c50, censusTest)
+mmetric(censusTest$y, predicted_y_test2, metric=c("ACC","TPR","PRECISION","F1"))
+
+# For comparison, applying the model to the train set and generate evaluation metrics. 
+# Check out the performance drop in the holdout set.
+predicted_y_train2 <- predict(census_c50, censusTrain)
+mmetric(censusTrain$y, predicted_y_train2, metric=c("ACC","TPR","PRECISION","F1"))
+```
+
+> With a test accuracy of 87.03% being slightly lower than the train accuracy of 88.07% for the C5.0 model on the uncleaned data, the model still showcases good performance. The difference between test and train accuracy is minimal, indicating that the model generalizes well to unseen data.
+ 
+Using KSVM as third model for uncleaned data
+```{r ksvm model for uncleaned data}
+# Using the train set to build a model
+census_ksvm <- ksvm(y~., censusTrain)
+census_ksvm
+
+# Applying the model to the hold-out test set and generate holdout evaluation metrics
+
+predicted_y_test3 <- predict(census_ksvm, censusTest)
+mmetric(censusTest$y, predicted_y_test3, metric=c("ACC","TPR","PRECISION","F1"))
+
+# For comparison, applying the model to the train set and generate evaluation metrics. 
+# Check out the performance drop in the holdout set.
+predicted_y_train3 <- predict(census_ksvm, censusTrain)
+mmetric(censusTrain$y, predicted_y_train3, metric=c("ACC","TPR","PRECISION","F1"))
+```
+
+> With a test accuracy of 86.30% being slightly lower than the train accuracy of 86.51% for the KSVM model on the uncleaned data, the model still showcases good performance. The difference between test and train accuracy is minimal, indicating that the model generalizes well to unseen data.
+
+Using Navie Bayes as first model for cleaned data
+```{r Naive Bayes model}
+# Using the train set to build a model
+census_nb_cleaned <- naiveBayes(y~., censusTrain_cleaned)
+census_nb_cleaned
+
+# Applying the model to the hold-out test set and generate holdout evaluation metrics
+predicted_test1_cleaned <- predict(census_nb_cleaned, censusTest_cleaned)
+mmetric(censusTest_cleaned$y, predicted_test1_cleaned, metric=c("ACC","TPR","PRECISION","F1"))
+
+# For comparison, applying the model to the train set and generate evaluation metrics. 
+predicted_y_train1_cleaned <- predict(census_nb_cleaned, censusTrain_cleaned)
+mmetric(censusTrain$y, predicted_y_train1_cleaned, metric=c("ACC","TPR","PRECISION","F1"))
+```
+
+> For the Naive Bayes model on the cleaned data, we notice a significant difference between test and train accuracy, with a test accuracy of 82.92% and a train accuracy of 67.10%. This leads to potential underfitting of the dataset.
+ 
+Using C5.0 as second model for cleaned data
+```{r C5.0 model}
+# Using the train set to build a model
+census_c50_cleaned <- C5.0(y~., censusTrain_cleaned)
+census_c50_cleaned
+
+# Applying the model to the hold-out test set and generate holdout evaluation metrics
+
+predicted_y_test2_cleaned <- predict(census_c50_cleaned, censusTest_cleaned)
+mmetric(censusTest_cleaned$y, predicted_y_test2_cleaned, metric=c("ACC","TPR","PRECISION","F1"))
+
+# For comparison, applying the model to the train set and generate evaluation metrics. 
+# Check out the performance drop in the holdout set.
+predicted_y_train2_cleaned <- predict(census_c50_cleaned, censusTrain_cleaned)
+mmetric(censusTrain_cleaned$y, predicted_y_train2_cleaned, metric=c("ACC","TPR","PRECISION","F1"))
+```
+
+> With a test accuracy of 85.83% being slightly lower than the train accuracy of 88.45% for the C5.0 model on the uncleaned data, this leads to potential overfitting of the data. 
+
+Using KSVM as third model for cleaned data
+```{r ksvm model}
+# Using the train set to build a model
+census_ksvm_cleaned <- ksvm(y~., censusTrain_cleaned)
+census_ksvm_cleaned
+
+# Applying the model to the hold-out test set and generate holdout evaluation metrics
+
+predicted_y_test3_cleaned <- predict(census_ksvm_cleaned, censusTest_cleaned)
+mmetric(censusTest_cleaned$y, predicted_y_test3_cleaned, metric=c("ACC","TPR","PRECISION","F1"))
+
+# For comparison, applying the model to the train set and generate evaluation metrics. 
+# Check out the performance drop in the holdout set.
+predicted_y_train3_cleaned <- predict(census_ksvm_cleaned, censusTrain_cleaned)
+mmetric(censusTrain_cleaned$y, predicted_y_train3_cleaned, metric=c("ACC","TPR","PRECISION","F1"))
+```
+
+> With a test accuracy of 85.53% being slightly lower than the train accuracy of 86.86% for the KSVM model, the model still showcases good performance. The difference between test and train accuracy is minimal, indicating that the model performs well on unseen data.
+
+Cross - Validation 
+
+```{r Define cv_function}
+
+cv_function <- function(df, target, nFolds, seedVal, classification, metrics_list)
+{
+  set.seed(seedVal)
+  folds = createFolds(df[,target],nFolds) 
+  
+  cv_results <- lapply(folds, function(x)
+  { 
+    train <- df[-x,-target]
+    test  <- df[x,-target]
+    train_target <- df[-x,target]
+    test_target <- df[x,target]
+    classification_model <- classification(train,train_target) 
+    pred<- predict(classification_model,test)
+    return(mmetric(test_target,pred,c("ACC","PRECISION","TPR","F1")))
+  })
+  
+  cv_results_m <- as.matrix(as.data.frame(cv_results))
+  cv_mean<- as.matrix(rowMeans(cv_results_m))
+  colnames(cv_mean) <- "Mean"
+  cv_sd <- as.matrix(rowSds(cv_results_m))
+  colnames(cv_sd) <- "Sd"
+  cv_all <- cbind(cv_results_m, cv_mean, cv_sd)
+  kable(cv_all,digits=2)
+}
+```
+
+Cross Validation for uncleaned data
+```{r run cross-validations for uncleaned data}
+
+df <- census_data
+target <- 15
+nFolds <- 5
+seedVal <- 500
+assign("classification", naiveBayes)
+metrics_list <- c("ACC","PRECISION","TPR","F1")
+cv_function(df, target, nFolds, seedVal, classification, metrics_list)
+
+# Different nFolds
+nFolds <- 10
+cv_function(df, target, nFolds, seedVal, classification, metrics_list)
+
+# Different classification algorithm
+
+assign("classification", C5.0)
+cv_function(df, target, nFolds, seedVal, classification, metrics_list)
+
+# Different nFolds
+nFolds <- 5
+cv_function(df, target, nFolds, seedVal, classification, metrics_list)
+```
+
+Cross Validation for cleaned data
+```{r run cross-validations}
+
+df <- census_data_cleaned
+target <- 15
+nFolds <- 5
+seedVal <- 500
+assign("classification", naiveBayes)
+metrics_list <- c("ACC","PRECISION","TPR","F1")
+cv_function(df, target, nFolds, seedVal, classification, metrics_list)
+
+# Different nFolds
+nFolds <- 10
+cv_function(df, target, nFolds, seedVal, classification, metrics_list)
+
+# Different classification algorithm
+
+assign("classification", C5.0)
+cv_function(df, target, nFolds, seedVal, classification, metrics_list)
+
+# Different nFolds
+nFolds <- 5
+cv_function(df, target, nFolds, seedVal, classification, metrics_list)
+
+toc()
+```
+
+## Task IV - Reflections 
+Write up your summary findings in a paragraph to conclude your analysis.
+
+> In this analysis, I carefully considered the impact of handling the "?" values in the dataframe by exploring two possibilities. First, I created a cleaned version of the dataset by removing the "?" values and replacing them with the 'Other' variable. Then, I kept the "?" values in the original version. This approach allowed me to thoroughly assess the effects of the models on both datasets and understand how the presence of missing data influenced the modeling process. I employed three classification models - Naive Bayes, C50 (Decision Tree), and KSVM (Kernel Support Vector Machines) - to perform the analysis and evaluated their performance on both the cleaned and uncleaned datasets. The results clearly showed that data cleaning had a significant impact on model performance. The cleaned dataset consistently outperformed the uncleaned dataset for all three models (Naive Bayes, C50, and KSVM) having accuracy for test between cleaned and uncleaned as (82.92% vs 83.21%, 85.83% vs 87.03%, 85.53% vs 86.30%). Similarly, the accuracy for trained data between cleaned and uncleaned dataset are as follows (67.10% vs 82.79%, 88.45% vs 88.07%, 86.86% vs 86.51%). By thoroughly exploring both scenarios, I was able to provide a comprehensive analysis of the modeling process and demonstrate how data cleaning positively influenced the model outcomes. 
+Among the three models (Naive Bayes, C50, and KSVM), the Naive Bayes model exhibits underfitting, as evident from the higher accuracy on the testing dataset compared to the training dataset (82.92% vs 67.10%). The C50 model on the other hand demonstrates a balanced performance on both the training and testing datasets, with the accuracies being nearly the same. Finally, the accuracy of the trained data is higher than that of the testing data in the KSVM model, which overfits the dataset (85.53% vs. 86.36%). The mean accuracy between 10-fold and 5-fold was then calculated using cross validation (82.88% vs 82.82%) for both uncleaned and cleansed data (82.88% vs 82.82%). Similar to this, the C5.0 model's mean accuracy between 10-fold and 5-fold of uncleaned data was (86.90% vs 86.82%) while that of cleaned data was (86.99% vs 86.83%).
