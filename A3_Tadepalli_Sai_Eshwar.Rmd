@@ -1,0 +1,171 @@
+---
+title: "A3_Tadepalli_Sai_Eshwar"
+author: "Sai Eshwar Tadepalli"
+date: "2023-06-07"
+output:
+  html_document:
+    highlight: breezedark
+    toc: yes
+    fig_width: 15
+    fig_height: 10
+editor_options: 
+  chunk_output_type: console
+---
+
+## 1 - Set up, Data import, and Preparation
+
+1A. Package loading, and data import.  Set the working directory to the directory where your rmarkdown program file resides in rstudio using getwd() and setwd(). For example,
+
+mydir <- getwd()
+setwd(mydir)
+
+Now that you are familiar with the variables in the input data, feel free to load character variables as factors in read.csv(). Show the overall structure and summary of the data frame that keeps the data from the input file.
+
+```{r set up, data import and inspections}
+# Load packages
+library(e1071)
+library(C50)
+library(caret)
+library(rminer)
+library(rmarkdown)
+library(matrixStats)
+library(knitr)
+library(tictoc) 
+tic()
+
+# Import titanic_cleaned.csv file
+cloud_wd <- getwd()
+setwd(cloud_wd)
+
+balanced <- read.csv(file = "CD_additional_modified.csv", stringsAsFactors = TRUE)
+
+### Examine the overall data frame
+str(balanced)
+summary(balanced)
+```
+1B. Partition this data frame for simple hold-out evaluation – 70% for training and the other 30% for testing.
+
+```{r Simple hold-out evaluation}
+# setting seed to a value for createDataPartition(). 
+set.seed(100)
+inTrain <- createDataPartition(iris$Species, p=0.7, list=FALSE)
+
+# Assigning the rows in CD Additional Modified indexed by inTrain to create a train set
+# Assign all other rows indexed by -inTrain to create a test set
+
+balancedTrain <- balanced[inTrain,]
+balancedTest <- balanced[-inTrain,]
+```
+
+1C. Show the distributions (in percentages) of the target variable in the whole input data frame, the train set and the test set.
+
+```{r Distribution of target variable}
+# Percentage distribution of target variable in the whole input data frame
+prop.table(table(balanced$y))*100
+# Percentage distribution of target variable in the train set
+prop.table(table(balancedTrain$y))*100
+# Percentage distribution of target variable in the test set
+prop.table(table(balancedTest$y))*100
+```
+
+## 2 - Simple Decision Tree Training and Testing
+
+(Note: Here, you are repeating the code for the same task in Assignment 2 in order to examine the models and performance results for a different data set):
+
+2A. (10 points) Train a C5.0 model using the default setting. Show information about this model and the summary of the model. Do not plot the tree at this point because the tree might be too complex. Generate and compare this model’s confusion matrices and classification evaluation metrics in testing and training sets 
+
+```{r C5.0 model}
+# Using the train set to build a model
+balanced_m1_c50 <- C5.0(y~., balancedTrain)
+balanced_m1_c50
+summary(balanced_m1_c50)
+
+# Applying the model to the hold-out test set and generate holdout evaluation metrics
+
+predicted_y_test1 <- predict(balanced_m1_c50, balancedTest)
+mmetric(balancedTest$y, predicted_y_test1, metric="CONF")
+mmetric(balancedTest$y, predicted_y_test1, metric=c("ACC","TPR","PRECISION","F1"))
+
+# For comparison, applying the model to the train set and generate evaluation metrics. 
+# Check out the performance drop in the holdout set.
+predicted_y_train1 <- predict(balanced_m1_c50, balancedTrain)
+mmetric(balancedTrain$y, predicted_y_train1, metric="CONF")
+mmetric(balancedTrain$y, predicted_y_train1, metric=c("ACC","TPR","PRECISION","F1"))
+```
+
+2B. (10 points) Explore reducing the tree complexity by lowering CF levels. In the code, select a CF level of your choice to train and test another C5.0 model. Plot the tree. Generate and compare this model’s confusion matrices and classification evaluation metrics in testing and training sets
+
+```{r C5.0 model and lowering CF}
+balanced_m2_c50 <- C5.0(y~., balancedTrain, control = C5.0Control(CF = 0.0000005))
+balanced_m2_c50
+plot(balanced_m2_c50)
+summary(balanced_m2_c50)
+
+predicted_y_test2 <- predict(balanced_m2_c50, balancedTest)
+
+mmetric(balancedTest$y, predicted_y_test2, metric="CONF")
+mmetric(balancedTest$y, predicted_y_test2, metric=c("ACC","TPR","PRECISION","F1"))
+
+predicted_y_train2 <- predict(balanced_m2_c50, balancedTrain)
+
+mmetric(balancedTrain$y, predicted_y_train2, metric="CONF")
+mmetric(balancedTrain$y, predicted_y_train2, metric=c("ACC","TPR","PRECISION","F1"))
+```
+
+## Code Chunk 3 - Simple Naïve Bayes Model Training and Testing
+
+3A. (15 points) Train a naive Bayes model using the training set from 1. Show information about this model. Generate and compare this model’s confusion matrices and classification evaluation metrics in testing and training sets 
+
+```{r Bayes Model}
+# Using the train set to build a model
+balanced_m1_nb <- naiveBayes(y~., balancedTrain)
+balanced_m1_nb
+
+# Applying the model to the hold-out test set and generate holdout evaluation metrics
+predicted_y_test3 <- predict(balanced_m1_nb, balancedTest)
+mmetric(balancedTest$y, predicted_y_test3, metric="CONF")
+mmetric(balancedTest$y, predicted_y_test3, metric=c("ACC","TPR","PRECISION","F1"))
+
+# For comparison, applying the model to the train set and generate evaluation metrics. 
+# Check out the performance drop in the holdout set.
+predicted_y_train3 <- predict(balanced_m1_nb, balancedTrain)
+mmetric(balancedTrain$y, predicted_y_train3, metric="CONF")
+mmetric(balancedTrain$y, predicted_y_train3, metric=c("ACC","TPR","PRECISION","F1"))
+```
+
+3B. (15 points) Explore removing one predictor for building naive Bayes models for this requirement so as to exam the impact of the removal of a predictor. In the code, decide on which predictor to be removed from the data sets for training and testing another naive Bayes model that could improve the true positive rate of the “yes” class of the target variable y. Train and apply this new model.  Generate and compare this model’s confusion matrices and classification evaluation metrics in testing and training sets 
+
+```{r Bayes Model with removal of predictor}
+### Removing Predictor
+
+# Using the train set to build a model
+balanced_m2_nb <- naiveBayes(balancedTrain[c(-21,-11)], balancedTrain$y)
+balanced_m2_nb
+
+# Applying the model to the hold-out test set and generate holdout evaluation metrics
+predicted_y_test4 <- predict(balanced_m2_nb, balancedTest)
+mmetric(balancedTest$y, predicted_y_test4, metric="CONF")
+mmetric(balancedTest$y, predicted_y_test4, metric=c("ACC","TPR","PRECISION","F1"))
+
+# For comparison, applying the model to the train set and generate evaluation metrics. 
+# Check out the performance drop in the holdout set.
+predicted_y_train4 <- predict(balanced_m2_nb, balancedTrain)
+mmetric(balancedTrain$y, predicted_y_train4, metric="CONF")
+mmetric(balancedTrain$y, predicted_y_train4, metric=c("ACC","TPR","PRECISION","F1"))
+```
+
+## 4 - Create a Named Cross-validation Function – cv_function (you can reuse the cv_function in week 3's tutorial, e.g., CV Titanic Tutorial.Rmd Download CV Titanic Tutorial.Rmd)
+
+A. This function uses several arguments – a data frame, the target variable, classification algorithm, seed value, the number of folds, and a set of classification metrics (without including confusion matrix output).
+
+B. It generates and displays the overall accuracy, and precision, true positive rate and f-measure of each class of the target variable of the model built for each fold.
+
+C. The function should also generate the mean values and standard deviations of each performance metric over all of the folds.
+
+D. Use kable() to show the performance metrics by fold and their mean values and standard deviations.
+
+## 5 - 5-fold and 10-fold C5.0 and naive Bayes evaluation performance with cv_function ( you can use the cv_function from the tutorial code)
+A. Use the data frame that keeps the entire set of input data to evaluate C5.0 and naive Bayes models by 5-fold as well as 10-fold cross-validation evaluations.
+
+ 
+
