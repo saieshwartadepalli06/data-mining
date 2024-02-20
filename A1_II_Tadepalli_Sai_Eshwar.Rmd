@@ -1,0 +1,207 @@
+---
+title: "A1_II_Tadepalli_Sai_Eshwar.Rmd"
+author: "Sai Eshwar Tadepalli"
+date: "2023-05-24"
+output: 
+  html_document:
+    highlight: breezedark
+    number_sections: yes
+    toc: yes
+    fig_width: 15
+    fig_height: 10
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Code chunk 1 - Set up, data import and inspection code for the following
+
+1.A. Remember to use getwd() and setwd() to set the working directory in your rmarkdown file. For example,  mydir <- getwd() & setwd(mydir)
+
+```{r Set up and import data}
+library(rmarkdown)
+library(psych)
+library(scatterplot3d)
+library(caret)
+
+# Import data using read.csv().  Do not coerce the character variables to factors automatically when loading the data.  Examine the overall ‘structure’ of the input data.
+
+mydir <- getwd()
+setwd(mydir)
+balanced <- read.csv(file = "CD_additional_balanced.csv", stringsAsFactors = FALSE)
+# Examine the overall 'structure' of the input data
+str(balanced)
+```
+
+1.B. Transform all of the character variables that include categorical values to factor variables. After this transformation, show the overall ‘structure’ and the ‘summary’ of the input data.  
+
+```{r transform character variables into factor}
+is.factor(as.character(balanced))
+
+# Changing character variables to factor 
+balanced$job <- factor(balanced$job)
+balanced$marital <- factor(balanced$marital)
+balanced$education <- factor(balanced$education)
+balanced$default <- factor(balanced$default)
+balanced$housing <- factor(balanced$housing)
+balanced$loan <- factor(balanced$loan)
+balanced$contact <- factor(balanced$contact)
+balanced$month <- factor(balanced$month)
+balanced$day_of_week <- factor(balanced$day_of_week)
+balanced$poutcome <- factor(balanced$poutcome)
+balanced$y <- factor(balanced$y)
+
+# Show the overall 'structure' and the 'summary' of the input data
+str(balanced)
+summary(balanced)
+```
+
+## Code chunk 2 - For each of these numeric variables - age, duration, campaign, and pdays
+
+2.A. Create a histogram and include a title of the histogram.
+
+```{r histogram of variables}
+
+# Histogram of Age
+hist(balanced$age, main = "Histogram of Age in the CD Additional Balanced data set", xlab = "age")
+
+# Histogram of Duration 
+hist(balanced$duration, main = "Histogram of Duration in the CD Additional Balanced data set", xlab = "duration")
+
+# Histogram of Campaign 
+hist(balanced$campaign, main = "Histogram of Campaign in the CD Additional Balanced data set", xlab = "campaign")
+
+# Histogram of Pdays 
+hist(balanced$pdays, main = "Histogram of Pdays in the CD Additional Balanced data set", xlab = "pdays")
+```
+
+2.B. Create a boxplot and include a title in the plot.
+
+```{r boxplot of variables}
+# Boxplot of Age
+boxplot(balanced$age, main = "Boxplot of Age in the CD Additional Balanced data set", ylab = "age")
+
+# Boxplot of Duration
+boxplot(balanced$duration, main = "Boxplot of Duration in the CD Additional Balanced data set", ylab = "duration")
+
+# Boxplot of Campaign
+boxplot(balanced$campaign, main = "Boxplot of Campaign in the CD Additional Balanced data set", ylab = "campaign")
+
+# Boxplot of Pdays
+boxplot(balanced$pdays, main = "Boxplot of Pdays in the CD Additional Balanced data set", ylab = "pdays")
+```
+
+2.C. Show deciles of the variable.
+
+```{r decile of variables}
+quantile(balanced$age, seq(from = 0, to = 1, by = 0.10))
+quantile(balanced$duration, seq(from = 0, to = 1, by = 0.10))
+quantile(balanced$campaign, seq(from = 0, to = 1, by = 0.10))
+quantile(balanced$pdays, seq(from = 0, to = 1, by = 0.10))
+```
+
+## Code chunk 3 – Explore factor variables 
+
+3.A. For each of the selected factor variables, and for each of the variable’s levels (e.g., “success”, “failure”, “nonexistent” of poutcome), show  the count value and percentage value of instances belonging to that level.
+
+Note: Select variable y and three other factor variables (e.g, job, education and poutcome) for this task. Do not include additional variables.
+
+```{r Factor variables count and percentage}
+
+# Count observations having factor value
+y.table <- table(balanced$y)
+y.table
+y.perc <- prop.table(table(balanced$y))*100
+y.perc
+
+job.table <- table(balanced$job)
+job.table
+job.perc <- prop.table(table(balanced$job))*100
+job.perc
+
+education.table <- table(balanced$education)
+education.table
+education.perc <- prop.table(table(balanced$education))*100
+education.perc
+
+poutcome.table <- table(balanced$poutcome)
+poutcome.table
+poutcome.perc <- prop.table(table(balanced$poutcome))*100
+poutcome.perc
+```
+
+3.B. For each of the selected variables, show a bar plot of the number of instances (i.e. count) with a level name for each possible value. Show a  descriptive title in each plot.
+
+```{r barplot of variables}
+#Barplot of y 
+barplot(y.table, main = "Bar Plot of y in the CD Additional Balanced data set",
+        xlab = "y")
+
+#Barplot of job
+barplot(job.table, main = "Bar Plot of job in the CD Additional Balanced data set",
+        xlab = "job")
+
+#Barplot of education
+barplot(education.table, main = "Bar Plot of education in the CD Additional Balanced data set",
+        xlab = "education")
+
+#Barplot of poutcome
+barplot(poutcome.table, main = "Bar Plot of poutcome in the CD Additional Balanced data set",
+        xlab = "poutcome")
+```
+
+## Code chunk 4 – Explore relationships amongst multiple variables
+
+4.A Use cor and pairs.panels to display correlations for these seven numeric variables – age, duration, campaign, pdays, euribor3m, emp.var.rate, and nr.employed.
+
+```{r correlation, pairs panels of variables}
+
+cor_display <- balanced[c("age", "duration", "campaign", "pdays", "euribor3m", "emp.var.rate", "nr.employed")]
+
+# Correlation of variables
+cor(cor_display)
+
+# Display of correlated variables
+pairs.panels(cor_display)
+```
+
+4.B For each of these numeric variables - duration, emp.var.rate, cons.price.idx, and cons.conf.idx. 
+
+(i) Show a boxplot of this numeric variable by y. 
+(ii) Use the aggregate function with 'summary' to aggregate this variable by y. The output should be the six number statistics (i.e. min., 1st quantile, median, mean, 3rd quantile, and max.) of the variable (e.g., duration)aggregated by “yes” and “no” respectively of y.
+
+The output of aggregate in task will NOT be visible until you knit. You can test your code by copying pasting to the console.
+
+```{r boxplot, aggregate of variables}
+
+# Boxplot of variables
+boxplot(duration~y, data = balanced)
+boxplot(emp.var.rate~y, data = balanced)
+boxplot(cons.price.idx~y, data = balanced)
+boxplot(cons.conf.idx~y, data = balanced)
+
+# Aggregate of variables
+aggregate(duration~y, summary, data = balanced)
+aggregate(emp.var.rate~y, summary, data = balanced)
+aggregate(cons.price.idx~y, summary, data = balanced)
+aggregate(cons.conf.idx~y, summary, data = balanced)
+```
+
+4.C Draw a 3d scatter plot to show y values in shapes (e.g. circle for “no”, triangle for “yes”) for each of the following combinations of numeric variables (along the three axes). Include a main title for the plot and legend for the shapes of y in the plot. 
+(i) age, campaign and duration 
+(ii) nr.employed, euribor3m and duration 
+
+```{r scatterplot 3d of variables}
+# Scatterplot 3D
+scatterplot3d(balanced$age,balanced$campaign,balanced$duration, pch = as.numeric(balanced$y), main = "3D scatter plot of age, campaign and duration in the CD Additional Balanced data")
+
+legend('topright', legend = levels(balanced$y),  cex = 0.8, pch = 1:2)
+
+# Scatterplot 3D
+scatterplot3d(balanced$nr.employed,balanced$euribor3m,balanced$duration, pch = as.numeric(balanced$y), main = "3D scatter plot of nr.employed, euribor3m and duration in the CD Additional Balanced data")
+
+legend('topright', legend = levels(balanced$y),  cex = 0.8, pch = 1:2)
+```
