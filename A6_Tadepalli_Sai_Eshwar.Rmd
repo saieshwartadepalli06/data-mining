@@ -1,0 +1,169 @@
+---
+title: "A6_Tadepalli_Sai_Eshwar"
+author: "Sai Eshwar Tadepalli"
+date: "2023-07-12"
+output: 
+  html_document:
+    highlight: breezedark
+    toc: yes
+    fig_width: 15
+    fig_height: 10
+editor_options: 
+  chunk_output_type: console
+---
+
+## 1 - Load packages, prepare and inspect the data
+
+1.A Package loading, and Walmart_visits_7trips.csv Download Walmart_visits_7trips.csv import and transformation. Show the overall structure of the input file. Transform factor variables, and show a summary of the input data file.
+
+```{r package loading, csv import}
+# Installing packages from library
+library(C50)
+library(psych)
+library(RWeka)
+library(caret)
+library(rminer)
+library(matrixStats)
+library(knitr)
+library(arules)
+
+cloud_wd <- getwd()
+setwd(cloud_wd)
+
+# Read csv files and set stringsAsFactors to False
+walmart_visits <- read.csv(file = "Walmart_visits_7trips.csv", stringsAsFactors = FALSE)
+
+str(walmart_visits)
+```
+
+```{r factoring variable}
+# Factoring variable
+walmart_visits$DOW = factor(walmart_visits$DOW)
+walmart_visits$TripType = factor(walmart_visits$TripType)
+str(walmart_visits)
+summary(walmart_visits)
+```
+
+1.B Understand this data set using correlation analysis (pairs.panels from psych)
+
+```{r pairs panel}
+pairs.panels(walmart_visits)
+```
+
+1.C Build a descriptive C5.0 decision tree using the entire data set (TripType is the target variable). Prune the tree so that the number of tree leaves is smaller than 15 (use CF value to prune the tree). Plot the tree and show summary of the model to view tree rules and confusion matrix.
+
+```{r c5.0 package}
+visits_m1_c50 <- C5.0(TripType~., walmart_visits, control = C5.0Control(CF = 0.035))
+visits_m1_c50
+plot(visits_m1_c50)
+summary(visits_m1_c50)
+```
+
+> After factorizing TripType as the target variable for classification tree of C5.0 model with CF (confidence level) value equals 0.035, the tree size obtained is 5.
+
+## 2 - Use SimpleKMeans clustering  to understand visits 
+
+2.A Save the number of unique TripType in the imported data as TripType.levels. Remove TripType from input data. 
+
+```{r SimpleKMeans TripType.levels initialization}
+TripType.levels <- length(unique(walmart_visits$TripType))
+walmart_visits_new <- walmart_visits[,-c(1)]
+```
+
+2.B Generate clusters with the default (i.e. random) initial cluster assignment and the default distance function (Euclidean). The number of clusters equals to TripType.levels. Show the clustering information with the standard deviations and the centroids of the clusters.
+
+```{r clusters kmeans with random initial cluster assignment}
+nClusters <- TripType.levels
+
+# SimpleKmeans with random initial cluster assignment and default Euclidean distance
+walmarts_clustering <- SimpleKMeans(walmart_visits[,-1], Weka_control(N = nClusters, init = 0, A = "weka.core.EuclideanDistance", V = TRUE))
+walmarts_clustering
+```
+
+> When analyzing with default random initial cluster assignment with SimpleKmeans model, we get an within cluster sum of squared error as 3983.32 and number of iterations as 14. 
+
+2.C Keep the number of clusters at TripType.levels and the Euclidean distance function. Change the initial cluster assignment method to the Kmeans++ method. Cluster the visits again and show the standard deviations and the centroids of the clusters.
+
+```{r SimpleKmeans++ with Euclidean distance}
+# SimpleKmeans++ without random initial cluster assignment and default Euclidean distance
+walmarts_clustering_1 <- SimpleKMeans(walmart_visits[,-1], Weka_control(N = nClusters, init = 1, A = "weka.core.EuclideanDistance", V = TRUE))
+walmarts_clustering_1
+```
+
+> When analyzing cluster assignment with Kmeans++ model, we get an within cluster sum of squared error as 4012.51 and number of iterations as 22. 
+
+2.D Keep the number of clusters at TripType.levels and the initial cluster assignment method to be the Kmeans++ method. Change the distance function to "weka.core.ManhattanDistance". Cluster the visits again and show the standard deviations and the centroids of the clusters.
+
+```{r KSimpleMeans++ with Manhattan distance}
+# SimpleKmeans++ with random initial cluster assignment and Manhattan distance
+walmarts_clustering_2 <- SimpleKMeans(walmart_visits[,-1], Weka_control(N = nClusters, init = 1, A = "weka.core.ManhattanDistance", V = TRUE))
+walmarts_clustering_2
+```
+
+> When analyzing cluster assignment with Kmeans++ model and setting distance function as Manhattan distance, we get an within cluster sum of squared error as 6719.90 and number of iterations as 15. 
+
+2.E Choose your own distance function and initial cluster assignment method, increase or decrease the number of clusters. Cluster the visits again and show the standard deviations and the centroids of the clusters.
+
+```{r KSimpleMeans++ with Manhattan distance and 3 clusters}
+# SimpleKmeans++ with random initial cluster assignment and Manhattan distance
+walmarts_clustering_3 <- SimpleKMeans(walmart_visits[,-1], Weka_control(N = 3, init = 1, A = "weka.core.ManhattanDistance", V = TRUE))
+walmarts_clustering_3
+```
+
+> When analyzing cluster assignment with Kmeans++ model, setting distance function as Manhattan distance and number of clusters as 3, we get an within cluster sum of squared error as 11181.26 and number of iterations as 4. 
+
+## 3 - Market Basket Analysis with the Walmart dept baskets 
+
+3.A Import Walmart_baskets_1week.csv Download Walmart_baskets_1week.csv using the following read.transactions() with the “single” format (for long format) and save it in a sparse matrix called, e.g., Dept_baskets.
+
+```{r mba with walmart dept}
+Dept_baskets <- read.transactions("Walmart_baskets_1week.csv", format="single", sep = ",", header = TRUE, cols=c("VisitNumber","DepartmentDescription"))  
+
+summary(Dept_baskets)
+```
+
+3.B Inspect the first 15 transactions.
+
+```{r inspect 15 transactions}
+# look at the first fifteen transactions
+inspect(Dept_baskets[1:15])
+```
+
+3.C Use the itemFrequencyPlot command to plot the most frequent 15 items in the descending order of transaction frequency in percentage.
+
+```{r item frequency plot}
+# top 15 most frequent words
+itemFrequencyPlot(Dept_baskets, type="relative", topN = 15)
+itemFrequencyPlot(Dept_baskets, type="absolute", topN = 15) 
+```
+
+3.D Associate rule mining 
+
+i. Use the apriori command to generate about 50 to 100 association rules from the input data. Set your own minimum support and confidence threshold levels. Remember if the thresholds are too low, you will generate more rules than desired, or if you set them too high, you may not generate any or a sufficient number of rules. Show the rules in the descending order of their lift values.
+
+```{r apriori with 50-100}
+Depts_baskets_c1 <- apriori(Dept_baskets, parameter = list(support = 0.05, confidence = 0.25))
+inspect(sort(Depts_baskets_c1, by = "lift"))
+```
+
+> When applying apriori model to perform association rule mining with support as 0.05 and confidence threshold set to 0.25, we get coverage, lift and count of each rule associated with it. Among them, rule with LHS equal to {DAIRY, GROCERY DRY GOODS} and RHS {COMM BREAD} has high lift value of 4.55 and count equivalent to 112 and coverage 0.1170. Similarly, {} to {DSD GROCERY} has least lift value of 1 and count 612. In total, we got 78 association rules in this model. 
+
+ii. Similar to the last task, use the apriori command now to generate about 100 - 200 association rules from the input data. Set your own minimum support and confidence threshold levels. Show the rules in the descending order of their lift values.
+
+```{r apriori with 100-200}
+Depts_baskets_c2 <- apriori(Dept_baskets, parameter = list(support = 0.05, confidence = 0.02))
+inspect(sort(Depts_baskets_c2, by = "lift"))
+```
+
+> When applying apriori model to perform association rule mining with support as 0.05 and confidence threshold set to 0.02, we get coverage, lift and count of each rule associated with it. Among them, rule with LHS equal to {DAIRY, GROCERY DRY GOODS} and RHS {COMM BREAD} has high lift value of 4.55 and count equivalent to 112 and coverage 0.1170. Similarly, {} to {DSD GROCERY} has least lift value of 1 and count 612. In total, we got 106 association rules in this model. 
+
+## Task II Reflections 
+
+What have you learned from building each of these models and the modeling impact of your adjustments to the hyperparameters or dataset? What can you say about the clusters that were formed? Is there anything interesting to point out? Recall clustering is often used to discover latent (hidden) information. What have you discovered? Make sure to discuss the association rule mining results as well. 
+
+If you were explaining the results of these models to a supervisor what would you say about them? Attempt to do more than just state facts here, interpret the results. Coding is great, interpretation of output is even more important. Discuss each model.  Write at least 150 words.
+
+> Firstly, while evaluating with the C5.0 model with a CF (confidence level) value of 0.035, the classification tree obtained is of size 5. NetQty has a utilization of 100% while UniqDepts has a usage of 26.32%. The decision tree is separated into NetQty less than 3 and larger than 3. Later, the Kmeans clustering methodology is then used to examine similarities in consumer behavior. When we use the SimpleKmeans model with the default random beginning cluster assignment, the within cluster sum of squared error is 3983.32 and the number of iterations is 14. The distance function utilized here was Euclidean distance. Kmeans++ approach is used after modifying the hyperparameters to develop a better model with good accuracy. When using the Kmeans++ model to analyze cluster assignment, we receive a within cluster sum of squared error of 4012.51 and a number of iterations of 22. Furthermore, when we use the Kmeans++ model for evaluating cluster assignment, we obtained a within cluster sum of squared error of 11181.26 and a number of iterations of 4. The cluster sum of squared error is increasing as we keep on changing the hyperparameter. 
+
+> Finally, we utilize the apriori model to perform association rule mining, with support set to 0.05 and confidence set to 0.02, to get coverage, lift, and count for each rule associated with it. Among them, the rule with LHS equal to {DAIRY, GROCERY DRY GOODS, and RHS} equal to {COMM BREAD} has a high lift value of 4.55, a count of 112, and coverage of 0.1170. Similarly, {} to {DSD GROCERY} has the lowest lift value of 1 and the highest count of 612. This model contains a total of 106 association rules. The association rule mining technique is used to extract associations between items, revealing the customer purchase behaviors. In a similar manner, while using an apriori model to execute association rule mining with a support level of 0.05 and a confidence threshold of 0.02, we obtain coverage, lift, and count for each rule related to it. Among them, the rule with LHS equal to {DAIRY, GROCERY DRY GOODS} and RHS equal to {COMM BREAD} has a high lift value of 4.55 and counts equal to 112 while having a coverage of 0.1170. Comparably, {} to {DSD GROCERY} has least lift value of 1 and count 612. In total, we got 106 association rules in this model.
+
