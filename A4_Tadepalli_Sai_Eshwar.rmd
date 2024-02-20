@@ -1,0 +1,292 @@
+---
+title: "A4_Tadepalli_Sai_Eshwar"
+author: "Sai Eshwar Tadepalli"
+date: "2023-06-14"
+output:
+  html_document:
+    highlight: breezedark
+    toc: yes
+    fig_width: 15
+    fig_height: 10
+editor_options: 
+  chunk_output_type: console
+---
+
+## 1 - Set up, data import, data exploration, data partitioning, and inspection code
+
+1.A. Package loading, and data import.
+
+Set the working directory to the directory where your rmarkdown program file resides in rstudio using getwd() and setwd(). For example, 
+
+         mydir <- getwd()
+         setwd(mydir)
+
+Load character strings as character fields. Show the overall structure and summary of the input data.  Other than the Name, transform all other non-numeric fields to be factor variables.
+ 
+```{r set up, data import, partition and inspections}
+# Load libraries
+library(rmarkdown)
+library(psych)
+library(rpart)
+library(RWeka)
+library(caret)
+library(rminer)
+library(matrixStats)
+library(knitr)
+
+cloud_wd <- getwd()
+setwd(cloud_wd)
+
+# Read csv files
+sales_filtered <- read.csv(file = "NA_sales_filtered.csv", stringsAsFactors = FALSE)
+
+# Summary and Structure of sales_filtered df
+str(sales_filtered)
+summary(sales_filtered)
+ 
+sales_filtered$Platform = factor(sales_filtered$Platform)
+sales_filtered$Genre = factor(sales_filtered$Genre)
+sales_filtered$Rating = factor(sales_filtered$Rating)
+
+str(sales_filtered)
+summary(sales_filtered)
+```
+
+1.B. Use pairs.panels to show distributions and correlations of all of the numeric variables.
+
+```{r show distributions and correlations}
+pairs.panels(sales_filtered)
+```
+
+1.C. Remove the Name variable from the data frame. All subsequent models should have this column excluded. Build a linear regression model. Show the summary of the model to understand the significance and coefficients of the predictors in the model and the overall model fit. Note that the purpose of this task is not to build a predictive model. Rather, it is often a good idea to explore a data set with white-box models like linear regression (for numeric target variable) or decision tree (for factor target variable).
+
+```{r linear regression model}
+sales_filtered <- sales_filtered[,-1]
+lm_model <- lm(NA_Sales ~ ., data = sales_filtered)
+summary(lm_model)
+```
+
+1.D. Partition the dataset for simple hold-out evaluation – 70% for training and the other 30% for testing.
+
+```{r simple hold-out evaluation}
+# setting seed to a value for createDataPartition(). 
+set.seed(500)
+inTrain <- createDataPartition(sales_filtered$NA_Sales, p=0.7, list=FALSE)
+
+# Assigning the rows in Sales filtered indexed by inTrain to create a train set
+# Assign all other rows indexed by -inTrain to create a test set
+
+train_target <- sales_filtered[inTrain,8]
+test_target <- sales_filtered[-inTrain,8]
+train_input <- sales_filtered[inTrain,-8]
+test_input <- sales_filtered[-inTrain,-8]
+```
+
+1.E. Show the overall summaries of training and testing sets.
+
+```{r overall summary of training and testing set}
+summary(train_target)
+summary(test_target)
+summary(train_input)
+summary(test_input)
+```
+
+## 2 - lm, rpart and M5P model training and testing
+
+2.A. Train three models using lm, rpart, and M5P on the training set (built in 1.D). Use the default settings of these methods throughout this assignment.
+
+```{r three models using lm, rpart and m5p}
+# regression tree using rpart
+sales_rpart_model <- rpart(train_target ~ ., data = train_input)
+# generate predictions for the testing and training dataset
+predictions_rpart_test <- predict(sales_rpart_model, test_input)
+predictions_rpart_train <- predict(sales_rpart_model, train_input)
+
+# M5P model tree
+sales_m5p_model <- M5P(train_target ~ ., data = train_input)
+# generate predictions for the model
+predictions_m5p_test <- predict(sales_m5p_model, test_input)
+predictions_m5p_train <- predict(sales_m5p_model, train_input)
+
+# Linear Regression Model
+sales_lm_model <- lm(train_target ~ ., data = train_input)
+# generate predictions for the model
+predictions_lm_test <- predict(sales_lm_model, test_input)
+predictions_lm_train <- predict(sales_lm_model, train_input)
+```
+
+2.B. For each of the three models trained in 2.A, perform the following:
+
+i) Show information about the model by specifying the model name, and summary(model name).
+
+```{r}
+# rpart
+sales_rpart_model
+summary(sales_rpart_model)
+
+# m5p
+sales_m5p_model
+summary(sales_m5p_model)
+
+# lm
+sales_lm_model
+summary(sales_lm_model)
+```
+
+ii) Apply the model and generate the model-fit (R2) and prediction error metrics (MAE, MAPE, RAE, RMSE, RMSPE, RRSE)  in both the testing and training sets.
+
+```{r r2 and prediction error metrics}
+# rpart
+# Performance of predictions on test data
+mmetric(test_target,predictions_rpart_test,c("MAE","RMSE","MAPE","RMSPE","RAE", "RRSE","COR", "R2"))
+# Performance of predictions on train data
+mmetric(train_target,predictions_rpart_train,c("MAE","RMSE","MAPE","RMSPE","RAE", "RRSE","COR", "R2"))
+
+# m5p
+# Performance of predictions on test and train data
+mmetric(test_target,predictions_m5p_test,c("MAE","RMSE","MAPE","RMSPE","RAE","RRSE","COR","R2"))
+mmetric(train_target,predictions_m5p_train,c("MAE","RMSE","MAPE","RMSPE","RAE","RRSE","COR","R2"))
+
+# lm
+mmetric(test_target,predictions_lm_test,c("MAE","RMSE","MAPE","RMSPE","RAE", "RRSE","COR", "R2"))
+mmetric(train_target,predictions_lm_train,c("MAE","RMSE","MAPE","RMSPE","RAE", "RRSE","COR", "R2"))
+```
+## 3 - Cross-validation of lm, rpart, and M5P NA_Sales prediction models
+
+3.A. Define a named function for cross-validation of numeric prediction models that generates a table of the model fit and error metrics specified in 2.B for each fold along with the means and standard deviations of the metrics over all of the folds.
+
+```{r cross validation}
+cv_function <- function(df, target, nFolds, seedVal, prediction_method, metrics_list)
+{
+  # create folds
+  set.seed(500)
+  folds = createFolds(df[,target],nFolds) 
+  # perform cross validation
+  cv_results <- lapply(folds, function(x)
+  { 
+    test_target <- df[x,target]
+    test_input  <- df[x,-target]
+
+    train_target <- df[-x,target]
+    train_input <- df[-x,-target]
+
+    prediction_model <- prediction_method(train_target~.,train_input) 
+    pred<- predict(prediction_model,test_input)
+    return(mmetric(test_target,pred,metrics_list))
+  })
+  # generate means and sds and show cv results, means and sds using kable
+  cv_results_m <- as.matrix(as.data.frame(cv_results))
+  cv_mean<- as.matrix(rowMeans(cv_results_m))
+  cv_sd <- as.matrix(rowSds(cv_results_m))
+  colnames(cv_mean) <- "Mean"
+  colnames(cv_sd) <- "Sd"
+  cv_all <- cbind(cv_results_m, cv_mean, cv_sd)
+  kable(t(cv_all),digits=2)
+}
+```
+
+3.B. Call the function in 3.A to generate 5-fold cross-validation results of lm, rpart and M5P models for NA_sales.
+
+```{r 5-fold cv}
+new_set <- sales_filtered
+df <- new_set
+target <- 8
+nFolds <- 5
+seedVal <- 500
+metrics_list <- c("MAE","RMSE","MAPE","RMSPE","RAE","RRSE","R2")
+
+# 5-fold CV for lm
+cv_function(df, target, 5, seedVal, lm, metrics_list)
+
+# 5-fold CV for rpart
+cv_function(df, target, 5, seedVal, rpart, metrics_list)
+
+# 5-fold CV for M5P 
+cv_function(df, target, 5, seedVal, M5P, metrics_list)
+```
+
+## 4 - Improve the models by adding a quadratic term of Critic_Score
+
+4.A. Create and add the quadratic term of Critic_Score, e.g., Critic_Score_Squared, to the predictors for NA_Sales in the whole data set for this assignment.
+
+```{r add quadratic term}
+# add a higher-order "Critic_Score" term
+sales_filtered$Critic_Score_Squared <- sales_filtered$Critic_Score^2
+```
+
+4.B. Build an lm model using the whole data set that includes Critic_Score_Squared to predict NA_Sales. Show the summary of this lm model. This allows you to inspect if this squared term is significant or not.
+
+```{r lm squared}
+# Linear Regression Model
+sales_lm_model_2 <- lm(NA_Sales ~ ., data = sales_filtered)
+summary(sales_lm_model_2)
+```
+
+4.C. Call the cross-validation function defined for 3.A to generate 5-fold cross-validation results of the lm, rpart and M5P models with Critic_Score_Squared.
+
+```{r cv function}
+new_set <- sales_filtered
+df <- new_set
+target <- 8
+nFolds <- 5
+seedVal <- 500
+metrics_list <- c("MAE","RMSE","MAPE","RMSPE","RAE","RRSE","R2")
+
+# 5-fold CV for lm
+cv_function(df, target, 5, seedVal, lm, metrics_list)
+
+# 5-fold CV for rpart
+cv_function(df, target, 5, seedVal, rpart, metrics_list)
+
+# 5-fold CV for M5P 
+cv_function(df, target, 5, seedVal, M5P, metrics_list)
+```
+
+## 5 - Improve the models with the log term of User_Count
+
+5.A. Create and add the natural log transformation of User_Count, e.g., log_User_Count, to the predictors for the target variable.  The following is an excerpt of sample code in webinar's demo:
+
+      # Remove the original User_Count (7th column) and create a new data frame
+      df_log_User_Count <- sales[,-7]
+
+      # Create and add the natural log transformation of User_Count
+       df_log_User_Count$log_User_Count <- log(sales$User_Count)
+
+```{r create new dataframe}
+# Remove the original User_Count (7th column) and create a new data frame
+df_log_User_Count <- sales_filtered[,-7]
+# Create and add the natural log transformation of User_Count
+df_log_User_Count$log_User_Count <- log(sales_filtered$User_Count)
+```
+
+5.B. Build an lm model with the whole data set that includes log_User_Count and excludes User_Count. The input data should not include any quadratic terms created in the previous code chunk. Show the summary of this lm model. This allows you to inspect if this log term is significant or not.
+
+```{r lm log}
+# Linear Regression Model
+sales_lm_model_3 <- lm(NA_Sales ~ . -Critic_Score_Squared, data = df_log_User_Count)
+summary(sales_lm_model_3)
+```
+
+5.C. Call the cross-validation function defined for 3.A to generate 5-fold cross-validation results of the lm, rpart, and M5P models with log_User_Count included and User_Count excluded.
+
+```{r cv for log}
+new_set <- df_log_User_Count[,-8]
+df <- new_set
+target <- 7
+nFolds <- 5
+seedVal <- 500
+metrics_list <- c("MAE","RMSE","MAPE","RMSPE","RAE","RRSE","R2")
+
+# 5-fold CV for lm
+cv_function(df, target, 5, seedVal, lm, metrics_list)
+
+# 5-fold CV for rpart
+cv_function(df, target, 5, seedVal, rpart, metrics_list)
+
+# 5-fold CV for M5P 
+cv_function(df, target, 5, seedVal, M5P, metrics_list)
+```
+
+## Reflections
+
+> We obtained an adjusted R-squared score of 0.2749 and a p-value less than 0.05 (which is significant) when we performed a linear regression model on the original dataset without the Name variable. We obtained an adjusted R-Squared value of 0.2556 and a p value less than 0.05 when running a linear regression model on the original dataset after dividing it into a training and testing set.  Then, for the RPart, Lm, and M5P models, we calculated model fit and prediction error metrics, respectively, and came to the conclusion that all of the models are perfectly fitted because the values for the test set are bigger than those for the train set. The mean values for MAE (0.27 vs 0.27 vs 0.25), RMSE  (0.42 vs 0.43 vs 0.41), R2 (0.27 vs 0.26 vs 0.33) were obtained after we performed 5 fold Cross validation for all of the models. These models were: lm, rpart, and m5p. The model's modified R-squared value was 0.3012, which is higher than that of a standard linear regression model, after we added a quadratic term of critic_score to determine the model's significance. Similar to this, 5-fold cross validation scores for the mean for MAE were (0.26 vs 0.27 vs 0.23); R2 (0.30 vs 0.26 vs 0.39); and RMSE (0.41 vs 0.43 vs 0.39). Later, we constructed a linear regression model and discovered that the adjusted r-squared was 0.35, which is a significant improvement over the prior model. This was done by ignoring one variable and adding the log of the same variable to the dataset without adding a quadratic term. Additionally, the mean values in the 5-fold Cross validation are MAE (0.26 vs. 0.27 vs. 0.26), RMSE (0.40 vs. 0.43 vs. 0.43), and R2 (0.36 vs. 0.26 vs. 0.32). The last model is the most appropriate of all. 
